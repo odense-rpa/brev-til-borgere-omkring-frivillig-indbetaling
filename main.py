@@ -1,45 +1,164 @@
 import asyncio
+import argparse
 import logging
-import sys
+import os
 
+import openpyxl
 from automation_server_client import AutomationServer, Workqueue, WorkItemError, Credential, WorkItemStatus
+from sbsys.manager import SbsysClientManager
+from odk_tools.tracking import Tracker
+from datafordeler.datafordeler import Datafordeler
+import sbsip
+from pathlib import Path
+from odk_tools.reporting import report
+
+from proces.models import Person
+from proces.datafordeler_service import DatafordelerService
+from proces.sbsys_service import SbsysService
+
+sbsys: SbsysClientManager
+tracker: Tracker
+datafordeler: Datafordeler
+sbsys_service: SbsysService
 
 
-async def populate_queue(workqueue: Workqueue):
+procesnavn = "Brev til borgere vedrørende frivillig indbetaling"
+
+async def populate_queue(workqueue: Workqueue, excel_sti:str):
     logger = logging.getLogger(__name__)
 
-    logger.info("Hello from populate workqueue!")
+    logger.info("Indlæser excel dokument")
+    wb = openpyxl.load_workbook(excel_sti)
+    ws = wb.worksheets[0]
+
+    headers = [cell.value for cell in ws[1]]
+    logger.info("Begynder at tilføje borgere til kø")
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        row_data = dict(zip(headers, row))
+
+        borger = Person(
+            Cpr=str(row_data["Personnummer"]).zfill(10),
+            Navn=str(row_data["Navn"]),
+            Adresse=str(row_data["Adresse"]),
+            Restgæld=str(row_data["Restgæld"]),
+            Lånebeløb=str(row_data["Lånebeløb"]),
+        )
+
+        workqueue.add_item(borger.model_dump(), reference=borger.Cpr)
+        logger.info(f"Added {borger.Navn} ({borger.Cpr}) to workqueue")
 
 
-async def process_workqueue(workqueue: Workqueue):
+async def process_workqueue(workqueue: Workqueue, fil_sti: str):
     logger = logging.getLogger(__name__)
 
-    logger.info("Hello from process workqueue!")
+    logger.info("Starter med at arbejde med på køen")
 
     for item in workqueue:
-        with item:
-            data = item.data  # Item data deserialized from json as dict
- 
-            try:
-                # Process the item here
-                pass
-            except WorkItemError as e:
-                # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
-                logger.error(f"Error processing item: {data}. Error: {e}")
-                item.fail(str(e))
+        async with sbsys:            
+            with item:
+                borger: Person = Person.model_validate(item.data)  # Item data deserialized from json as dict
+                try:
+                    
+                    if DatafordelerService.korrekt_adresse(borger, datafordeler) is not True:
+                        logger.info("Adresse stemmer ikke overens med datafordeler, sendes til manuel")
+                        report(
+                            "brev_til_borgere_omkring_frivillig_indbetaling",
+                            "Manuel",
+                            json={
+                                    "Cpr": borger.Cpr,
+                                    "Manuel årsag": "Adresse stemmer ikke overens med datafordeler"
+                            }
+                        )
+                        tracker.track_partial_task(procesnavn)
+                        continue
+
+                    await sbsys_service.find_og_åben_sag(borger)
+                    
+                    sbsys_service.send_brev_og_opret_sag(borger, fil_sti, datafordeler)
+                    
+                    tracker.track_task(procesnavn)                    
+                        
+                except WorkItemError as e:
+                    # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
+                    logger.error(f"Error processing item: {borger}. Error: {e}")
+                    report(
+                            "brev_til_borgere_omkring_frivillig_indbetaling",
+                            "Manuel",
+                            json={
+                                    "Cpr": borger.Cpr,
+                                    "Manuel årsag": f"Teknisk fejl: {e}"
+                            }
+                        )
+                    item.fail(str(e))
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    
     ats = AutomationServer.from_environment()
     workqueue = ats.workqueue()
+    parser = argparse.ArgumentParser(description="Brev til borgere omkring frivillig indbetaling")
+    
+    parser.add_argument(
+        "--excel", 
+        default="Excel.xlsx", 
+        help="Path to Excel file (default: Excel.xlsx)"
+    )
+    parser.add_argument(
+        "--queue",
+        action="store_true",
+        help="Populate the workqueue from the Excel file"
+    )
+    parser.add_argument(
+        "--word-template",
+        default="Brev.docx",
+        help="Path to the Word template for letter generation (default: ./Brev.docx)"
+    )
+    
+    args = parser.parse_args()
 
     # Initialize external systems for automation here..
-
+    sbsys_credential = Credential.get_credential("SBSYS - produktion")
+    tracking_credential = Credential.get_credential("Odense SQL Server")
+    sbsip_credential = Credential.get_credential("SBSip - produktion")
+    
+    certifikat_sti = os.getenv("CERTIFIKATER", "/certifikater")
+    datafordeler = Datafordeler(
+        certifikat_sti=os.path.join(certifikat_sti, "datafordeler.crt"),
+        certifikat_nøglefil=os.path.join(certifikat_sti, "datafordeler.key"),
+    )
+    
+    sbsys = SbsysClientManager(
+        sbsys_credential.data["base_url"],
+        sbsys_credential.data["token_url"],
+        sbsys_credential.data["client_id"],
+        sbsys_credential.data["client_secret"],
+        sbsys_credential.username or "",
+        sbsys_credential.password or ""
+    )
+    
+    tracker = Tracker(
+        username=tracking_credential.username or "",
+        password=tracking_credential.password or ""
+    )
+    
+    sbsip.start_sbsip(
+        brugernavn=sbsip_credential.username or "",
+        adgangskode=sbsip_credential.password or "",
+    )
+    
     # Queue management
-    if "--queue" in sys.argv:
+    if args.queue:
         workqueue.clear_workqueue(WorkItemStatus.NEW)
-        asyncio.run(populate_queue(workqueue))
+        asyncio.run(populate_queue(workqueue, args.excel))
         exit(0)
+        
+    sbsys_service = SbsysService(sbsys)
 
     # Process workqueue
-    asyncio.run(process_workqueue(workqueue))
+    if not Path(args.word_template).is_file():
+        raise FileNotFoundError(f"Word-skabelon ikke fundet: {args.word_template}")
+    asyncio.run(process_workqueue(workqueue, args.word_template))

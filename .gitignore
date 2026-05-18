@@ -1,2 +1,42 @@
-.venv
+# Virtual environment
+.venv/
+
+# Environment variables
 .env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data files
+*.csv
+*.xls
+*.xlsx
+*.docx
+
+# Certificates
+*.pem
+*.crt
+*.cer
+*.key
+*.p12
+*.pfx
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.iml
