@@ -67,10 +67,11 @@ class SbsysService:
                     },
                     data={"fields": json.dumps(brev_felter)}     
                 )
-        except:
+        except Exception as e:
+            logger.error(e)
             raise RuntimeError("Teknisk fejl: Kunne ikke danne brev")
             
-        pdf_path = Path(fil_sti)
+        pdf_path = Path("frivillig_brev.pdf")
         pdf_path.write_bytes(response.content)
         
         cpr_uden_bindestreg = borger.Cpr.replace("-","")
@@ -87,7 +88,8 @@ class SbsysService:
                 adresse=adresse,
                 sbsys_skabelon_id="2942"
             )
-        except:
+        except Exception as e:
+            logger.error(e)
             pdf_path.unlink()
             raise RuntimeError("Teknisk fejl: Kunne ikke sende brev")
         

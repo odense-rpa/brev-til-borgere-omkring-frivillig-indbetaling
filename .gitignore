@@ -20,6 +20,7 @@ build/
 *.xls
 *.xlsx
 *.docx
+*.pdf
 
 # Certificates
 *.pem
