@@ -2,7 +2,8 @@ from sbsys.manager import SbsysClientManager
 from proces.models import Person
 import logging
 import sbsip
-from datafordeler_service import Datafordeler
+from datafordeler.datafordeler import Datafordeler
+from proces.datafordeler_service import DatafordelerService
 from datetime import date
 import json
 from pathlib import Path
@@ -34,7 +35,7 @@ class SbsysService:
 
         sag = max(kandidater, key=lambda s: s.get("Oprettet", ""))
         logger.info("Kontrollere om borger allerede har åben sag af sagstype")
-        if sag ["SagsStatus"]["SagsTilstand"] == "Igangværende":
+        if sag is not None and sag["SagsStatus"]["SagsTilstand"] == "Aktiv":
             logger.info("Åben sag af sagstype findes allerede")
         elif sag is not None:
             logger.info("Ingen åben sag fundet, genåbner den nyeste lukket af sagstype")
@@ -49,7 +50,7 @@ class SbsysService:
         brev_felter = {
             "NAVN": borger.Navn,
             "CPR": borger.Cpr,
-            "ADRESSE": borger.Adresse,
+            "ADRESSE": borger.Adresse.AdresseTekst,
             "DAGSDATO": date.today().strftime("%d-%m-%Y"),
             "RESTGÆLD": borger.Restgæld,
             "LÅNEBELØB": borger.Lånebeløb

@@ -12,7 +12,7 @@ import sbsip
 from pathlib import Path
 from odk_tools.reporting import report
 
-from proces.models import Person
+from proces.models import Person, PersonAdresse
 from proces.datafordeler_service import DatafordelerService
 from proces.sbsys_service import SbsysService
 
@@ -39,7 +39,7 @@ async def populate_queue(workqueue: Workqueue, excel_sti:str):
         borger = Person(
             Cpr=str(row_data["Personnummer"]).zfill(10),
             Navn=str(row_data["Navn"]),
-            Adresse=str(row_data["Adresse"]),
+            Adresse=PersonAdresse.from_string(str(row_data["Adresse"])),
             Restgæld=str(row_data["Restgæld"]),
             Lånebeløb=str(row_data["Lånebeløb"]),
         )
@@ -53,12 +53,11 @@ async def process_workqueue(workqueue: Workqueue, fil_sti: str):
 
     logger.info("Starter med at arbejde med på køen")
 
-    for item in workqueue:
-        async with sbsys:            
+    async with sbsys:
+        for item in workqueue:
             with item:
                 borger: Person = Person.model_validate(item.data)  # Item data deserialized from json as dict
                 try:
-                    
                     if DatafordelerService.korrekt_adresse(borger, datafordeler) is not True:
                         logger.info("Adresse stemmer ikke overens med datafordeler, sendes til manuel")
                         report(
@@ -103,10 +102,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Brev til borgere omkring frivillig indbetaling")
     
     parser.add_argument(
-        "--excel", 
-        default="Excel.xlsx", 
-        help="Path to Excel file (default: Excel.xlsx)"
+        "--folder-path", 
+        default=".", 
+        help="Path to folder where Excel files are found"
     )
+    
     parser.add_argument(
         "--queue",
         action="store_true",
@@ -152,13 +152,18 @@ if __name__ == "__main__":
     
     # Queue management
     if args.queue:
-        workqueue.clear_workqueue(WorkItemStatus.NEW)
-        asyncio.run(populate_queue(workqueue, args.excel))
-        exit(0)
         
-    sbsys_service = SbsysService(sbsys)
+        excel_filer = list(Path(args.folder_path).glob("*.xls*"))
+        if not excel_filer:
+            raise FileNotFoundError(f"Ingen Excel-filer fundet i: {args.folder_path}")
+        excel = max(excel_filer, key=lambda f: f.stat().st_mtime)
+        
+        workqueue.clear_workqueue(WorkItemStatus.NEW)
+        asyncio.run(populate_queue(workqueue, str(excel)))
+        exit(0)   
 
     # Process workqueue
     if not Path(args.word_template).is_file():
         raise FileNotFoundError(f"Word-skabelon ikke fundet: {args.word_template}")
+    sbsys_service = SbsysService(sbsys)
     asyncio.run(process_workqueue(workqueue, args.word_template))
