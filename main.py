@@ -46,7 +46,9 @@ async def populate_queue(workqueue: Workqueue, excel_sti:str):
 
         workqueue.add_item(borger.model_dump(), reference=borger.Cpr)
         logger.info(f"Added {borger.Navn} ({borger.Cpr}) to workqueue")
-
+        
+    os.remove(excel_sti)
+    logger.info(f"Slettede excel fil: {excel_sti}")
 
 async def process_workqueue(workqueue: Workqueue, fil_sti: str):
     logger = logging.getLogger(__name__)
