@@ -33,7 +33,8 @@ class SbsysService:
         igangværende = [sag for sag in sager if sag["SagsStatus"]["SagsTilstand"] == "Igangværende"]
         kandidater = igangværende if igangværende else sager
 
-        sag = max(kandidater, key=lambda s: s.get("Oprettet", ""))
+        sag = max(kandidater, key=lambda s: s.get("Oprettet", "")) if kandidater else None
+                    
         logger.info("Kontrollere om borger allerede har åben sag af sagstype")
         if sag is not None and sag["SagsStatus"]["SagsTilstand"] == "Aktiv":
             logger.info("Åben sag af sagstype findes allerede")

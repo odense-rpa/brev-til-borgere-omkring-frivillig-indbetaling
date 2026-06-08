@@ -51,9 +51,10 @@ class PersonAdresse(BaseModel):
         husnummer = vh_match.group(2)
 
         # Parse etage and dør from "etage.dør" pattern (e.g. "01.tv", "st.4", "02.")
+        # Only treat as etage/dør if it looks like one (digit, st, kl) — not a locality name
         etage = None
         dør = None
-        if etage_dør_str:
+        if etage_dør_str and re.match(r"^(st|kl|\d+)(\..*)?$", etage_dør_str, re.IGNORECASE):
             if "." in etage_dør_str:
                 dot_idx = etage_dør_str.index(".")
                 etage = etage_dør_str[:dot_idx] or None

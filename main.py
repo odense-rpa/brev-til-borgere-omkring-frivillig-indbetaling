@@ -44,8 +44,9 @@ async def populate_queue(workqueue: Workqueue, excel_sti:str):
             Lånebeløb=str(row_data["Lånebeløb"]),
         )
 
-        workqueue.add_item(borger.model_dump(), reference=borger.Cpr)
-        logger.info(f"Added {borger.Navn} ({borger.Cpr}) to workqueue")
+        if not workqueue.get_item_by_reference(borger.Cpr, status=WorkItemStatus.COMPLETED):
+            workqueue.add_item(borger.model_dump(), reference=borger.Cpr)
+            logger.info(f"Added {borger.Navn} ({borger.Cpr}) to workqueue")
         
     os.remove(excel_sti)
     logger.info(f"Slettede excel fil: {excel_sti}")
@@ -153,8 +154,7 @@ if __name__ == "__main__":
     )
     
     # Queue management
-    if args.queue:
-        
+    if args.queue:       
         excel_filer = list(Path(args.folder_path).glob("*.xls*"))
         if not excel_filer:
             raise FileNotFoundError(f"Ingen Excel-filer fundet i: {args.folder_path}")
