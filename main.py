@@ -1,9 +1,9 @@
 import asyncio
 import argparse
+import csv
 import logging
 import os
 
-import openpyxl
 from automation_server_client import AutomationServer, Workqueue, WorkItemError, Credential, WorkItemStatus
 from sbsys.manager import SbsysClientManager
 from odk_tools.tracking import Tracker
@@ -24,32 +24,41 @@ sbsys_service: SbsysService
 
 procesnavn = "Brev til borgere vedrørende frivillig indbetaling"
 
-async def populate_queue(workqueue: Workqueue, excel_sti:str):
+async def populate_queue(workqueue: Workqueue, csv_sti: str):
     logger = logging.getLogger(__name__)
 
-    logger.info("Indlæser excel dokument")
-    wb = openpyxl.load_workbook(excel_sti)
-    ws = wb.worksheets[0]
+    logger.info("Indlæser csv fil")
+    for encoding in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            with open(csv_sti, newline="", encoding=encoding) as csv_fil:
+                sample = csv_fil.read(2048)
+                csv_fil.seek(0)
+                try:
+                    delimiter = csv.Sniffer().sniff(sample, delimiters=";,").delimiter
+                except csv.Error:
+                    delimiter = ";"
 
-    headers = [cell.value for cell in ws[1]]
-    logger.info("Begynder at tilføje borgere til kø")
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        row_data = dict(zip(headers, row))
+                logger.info("Begynder at tilføje borgere til kø")
+                for row_data in csv.DictReader(csv_fil, delimiter=delimiter):
+                    borger = Person(
+                        Cpr=str(row_data["Personnummer"]).zfill(10),
+                        Navn=str(row_data["Navn"]),
+                        Adresse=PersonAdresse.from_string(str(row_data["Adresse"])),
+                        Restgæld=str(row_data["Restgæld"]),
+                        Lånebeløb=str(row_data["Lånebeløb"]),
+                    )
 
-        borger = Person(
-            Cpr=str(row_data["Personnummer"]).zfill(10),
-            Navn=str(row_data["Navn"]),
-            Adresse=PersonAdresse.from_string(str(row_data["Adresse"])),
-            Restgæld=str(row_data["Restgæld"]),
-            Lånebeløb=str(row_data["Lånebeløb"]),
-        )
+                    if not workqueue.get_item_by_reference(borger.Cpr, status=WorkItemStatus.COMPLETED):
+                        workqueue.add_item(borger.model_dump(), reference=borger.Cpr)
+                        logger.info(f"Added {borger.Navn} ({borger.Cpr}) to workqueue")
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise ValueError(f"Kunne ikke læse csv-fil med kendte encodings: {csv_sti}")
 
-        if not workqueue.get_item_by_reference(borger.Cpr, status=WorkItemStatus.COMPLETED):
-            workqueue.add_item(borger.model_dump(), reference=borger.Cpr)
-            logger.info(f"Added {borger.Navn} ({borger.Cpr}) to workqueue")
-        
-    os.remove(excel_sti)
-    logger.info(f"Slettede excel fil: {excel_sti}")
+    os.remove(csv_sti)
+    logger.info(f"Slettede csv fil: {csv_sti}")
 
 async def process_workqueue(workqueue: Workqueue, fil_sti: str):
     logger = logging.getLogger(__name__)
@@ -155,13 +164,13 @@ if __name__ == "__main__":
     
     # Queue management
     if args.queue:       
-        excel_filer = list(Path(args.folder_path).glob("*.xls*"))
-        if not excel_filer:
-            raise FileNotFoundError(f"Ingen Excel-filer fundet i: {args.folder_path}")
-        excel = max(excel_filer, key=lambda f: f.stat().st_mtime)
+        csv_filer = list(Path(args.folder_path).glob("*.csv*"))
+        if not csv_filer:
+            raise FileNotFoundError(f"Ingen csv-filer fundet i: {args.folder_path}")
+        csv_fil = max(csv_filer, key=lambda f: f.stat().st_mtime)
         
         workqueue.clear_workqueue(WorkItemStatus.NEW)
-        asyncio.run(populate_queue(workqueue, str(excel)))
+        asyncio.run(populate_queue(workqueue, str(csv_fil)))
         exit(0)   
 
     # Process workqueue
