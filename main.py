@@ -104,11 +104,6 @@ async def process_workqueue(workqueue: Workqueue, fil_sti: str):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    
     ats = AutomationServer.from_environment()
     workqueue = ats.workqueue()
     parser = argparse.ArgumentParser(description="Brev til borgere omkring frivillig indbetaling")
