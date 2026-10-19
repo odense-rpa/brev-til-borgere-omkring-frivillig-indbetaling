@@ -2,7 +2,7 @@ from sbsys.manager import SbsysClientManager
 from proces.models import Person
 import logging
 import sbsip
-from datafordeler.datafordeler import Datafordeler
+from datafordeler import DatafordelerGraphQL
 from proces.datafordeler_service import DatafordelerService
 from datetime import date
 import json
@@ -45,7 +45,7 @@ class SbsysService:
             logger.info("Ingen sag af sagstype fundet, der skal oprettes en ny")
     
     @staticmethod
-    def send_brev_og_opret_sag(borger: Person, fil_sti: str, fordeler: Datafordeler):
+    def send_brev_og_opret_sag(borger: Person, fil_sti: str, fordeler: DatafordelerGraphQL):
         logger = logging.getLogger(__name__)
         
         brev_felter = {
@@ -78,7 +78,7 @@ class SbsysService:
         
         cpr_uden_bindestreg = borger.Cpr.replace("-","")
         
-        adresse, post_nr = fordeler.hent_adresse_til_sbsip(cpr_uden_bindestreg)
+        adresse, post_nr = fordeler.hent_person(cpr_uden_bindestreg).sbsip_adresse()
 
         try:
             sbsip.send_digital_post(

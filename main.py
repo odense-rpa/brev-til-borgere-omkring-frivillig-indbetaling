@@ -7,7 +7,7 @@ import os
 from automation_server_client import AutomationServer, Workqueue, WorkItemError, Credential, WorkItemStatus
 from sbsys.manager import SbsysClientManager
 from odk_tools.tracking import Tracker
-from datafordeler.datafordeler import Datafordeler
+from datafordeler import DatafordelerGraphQL
 import sbsip
 from pathlib import Path
 from odk_tools.reporting import report
@@ -18,7 +18,7 @@ from proces.sbsys_service import SbsysService
 
 sbsys: SbsysClientManager
 tracker: Tracker
-datafordeler: Datafordeler
+datafordeler: DatafordelerGraphQL
 sbsys_service: SbsysService
 
 
@@ -131,11 +131,11 @@ if __name__ == "__main__":
     sbsys_credential = Credential.get_credential("SBSYS - produktion")
     tracking_credential = Credential.get_credential("Odense SQL Server")
     sbsip_credential = Credential.get_credential("SBSip - produktion")
+    datafordeler_credential = Credential.get_credential("Datafordeler")
     
-    certifikat_sti = os.getenv("CERTIFIKATER", "/certifikater")
-    datafordeler = Datafordeler(
-        certifikat_sti=os.path.join(certifikat_sti, "datafordeler.crt"),
-        certifikat_nøglefil=os.path.join(certifikat_sti, "datafordeler.key"),
+    datafordeler = DatafordelerGraphQL(
+        client_id=datafordeler_credential.username,
+        client_secret=datafordeler_credential.password,
     )
     
     sbsys = SbsysClientManager(
