@@ -18,7 +18,7 @@ Robotten sender digitale breve til borgere med frivillige afdragsordninger (lån
 - Adgang til **Automation Server** (arbejdskø og credentials)
 - Adgang til **SBSYS** (produktionsmiljø)
 - Adgang til **SBSip** (produktionsmiljø)
-- Certifikater til **Datafordeler** (adressevalidering)
+- Credential `Datafordeler` i Automation Server (adressevalidering)
 
 ## Installation
 
@@ -38,7 +38,6 @@ Credentials registreres i Automation Server:
 | `ATS_URL` | URL til Automation Server API |
 | `ATS_TOKEN` | Bearer token til Automation Server |
 | `ATS_WORKQUEUE_OVERRIDE` | Tilsidesæt arbejdskø-ID (valgfri) |
-| `CERTIFIKATER` | Sti til mappe med Datafordeler-certifikater (standard: `/certifikater`) |
 
 ## Kørsel
 
@@ -52,7 +51,7 @@ uv run python main.py           # Behandl arbejdskøen
 | Pakke | Formål |
 |---|---|
 | `automation-server-client` | Workqueue-håndtering og credentials fra Automation Server |
-| `datafordeler` | Adressevalidering af borgere via Datafordeler-API med certifikat |
+| `datafordeler` | Adressevalidering af borgere via Datafordelerens GraphQL-API |
 | `odk-tools` | Opgavesporing (Tracker) og fejlrapportering |
 | `openpyxl` | Læsning af Excel-filer med borgerdata |
 | `sbsip` | Afsendelse af digital post til borgere |
